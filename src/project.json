@@ -1,4 +1,9 @@
 {
+  "authors": [
+    "Alex Ghiondea"
+  ],
+  "name":"wol",
+  "description": "Wake-On-LAN magic packet generator",
   "version": "1.0.0-*",
   "buildOptions": {
     "debugType": "portable",

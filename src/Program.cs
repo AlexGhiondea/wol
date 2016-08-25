@@ -1,4 +1,6 @@
-﻿using System.Net;
+﻿using System;
+using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using OutputColorizer;
 
@@ -9,12 +11,39 @@ namespace ConsoleApplication
         const int UDP_PORT = 9; // for now, hard code the port.
         public static void Main(string[] args)
         {
-            byte[] mac;
-            if (!TryConvertMACStringToBytes(args[0], out mac))
+            Colorizer.WriteLine("[Magenta!Wake-On-LAN] Magic Packet Generator, [Cyan!v1.0]");
+            
+            System.Console.WriteLine();
+            CommandLineOptions options = CommandLineOptions.Parse(args);
+            if (options == null)
             {
                 return;
             }
 
+            byte[] mac = new byte[0];
+            if (options.IsHost)
+            {
+                if (!TryLoadMacForHost(options.HostNameOrMAC, out mac))
+                {
+                    return;
+                }
+                Colorizer.WriteLine("Matched host '[Magenta!{0}]' to '[Magenta!{1}]'", options.HostNameOrMAC, BitConverter.ToString(mac));
+            }
+            else
+            {
+                // we are given a MAC, not a host
+                if (!TryConvertMACStringToBytes(options.HostNameOrMAC, out mac))
+                {
+                    return;
+                }
+            }
+
+            Colorizer.WriteLine("Sending magic packet to '[Magenta!{0}]'...", BitConverter.ToString(mac));
+            SendMagicPacket(mac);
+        }
+
+        private static void SendMagicPacket(byte[] mac)
+        {
             // The magic packet consists of 6 bytes all 0xFF
             // Followed by 16 repetitions of the target MAC 
             byte[] magicPacket = new byte[102];
@@ -35,7 +64,6 @@ namespace ConsoleApplication
                 }
             }
 
-            Colorizer.WriteLine("About to send magic packet to [Yellow!{0}]...", args[0]);
             using (UdpClient client = new UdpClient())
             {
                 client.SendAsync(magicPacket, magicPacket.Length, new IPEndPoint(IPAddress.Broadcast, UDP_PORT)).Wait();
@@ -43,7 +71,48 @@ namespace ConsoleApplication
             }
         }
 
-        public static bool TryConvertMACStringToBytes(string MAC, out byte[] macAsBytes)
+        private static bool TryLoadMacForHost(string hostName, out byte[] macAsBytes)
+        {
+            macAsBytes = null;
+            // read the host file and stop at the first one you find.
+
+            using (FileStream fs = new FileStream("hosts.txt", FileMode.Open, FileAccess.Read))
+            using (StreamReader sr = new StreamReader(fs))
+            {
+                string line; int lineCount = 0;
+                while ((line = sr.ReadLine()) != null)
+                {
+                    lineCount++;
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    // check to see if the name of the host matches the name passed in.
+                    int posFirstEq = line.IndexOf('=');
+
+                    if (posFirstEq < 0)
+                    {
+                        Colorizer.WriteLine("[Yellow!Warning:] Invalid entry at line [Cyan!{0}]", lineCount);
+                        continue;
+                    }
+
+                    string hostFromLine = line.Substring(0, posFirstEq);
+
+                    if (StringComparer.OrdinalIgnoreCase.Equals(hostFromLine, hostName))
+                    {
+                        // return the rest of the line converted to bytes.
+                        return  TryConvertMACStringToBytes(line.Substring(posFirstEq + 1), out macAsBytes);
+                    }
+                }
+            }
+
+            Colorizer.WriteLine("[Red!Error:] Could not find host '[Cyan!{0}]' in hosts.txt", hostName);
+
+            return false;
+        }
+
+        private static bool TryConvertMACStringToBytes(string MAC, out byte[] macAsBytes)
         {
             int pos = 0;
             macAsBytes = new byte[6];
