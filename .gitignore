@@ -4,6 +4,9 @@
 # VS Code
 .vscode/
 
+# to prevent accidentally checking in the hosts.txt file.
+hosts.txt
+
 # User-specific files
 *.suo
 *.user
