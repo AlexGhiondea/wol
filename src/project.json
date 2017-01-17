@@ -5,7 +5,7 @@
   "name":"wol",
   "description": "Wake-On-LAN magic packet generator",
   "version": "1.0.0-*",
-  "buildOptions": {
+  "buildOptions": { 
     "debugType": "portable",
     "emitEntryPoint": true
   },
@@ -17,7 +17,8 @@
           "type": "platform",
           "version": "1.0.0"
         },
-        "OutputColorizer":"1.1.0-rc-01"
+        "OutputColorizer":"1.1.0-rc-01",
+        "CommandLine.Net":"1.0.0-beta-05"
       },
       "imports": "dnxcore50"
     }

@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using OutputColorizer;
 
 namespace ConsoleApplication
@@ -12,28 +13,160 @@ namespace ConsoleApplication
         public static void Main(string[] args)
         {
             Colorizer.WriteLine("[Magenta!Wake-On-LAN] Magic Packet Generator, [Cyan!v1.0]");
-            
+
             System.Console.WriteLine();
-            CommandLineOptions options = CommandLineOptions.Parse(args);
-            if (options == null)
+
+            CommandLineOptions opt;
+            if (!CommandLine.Parser.TryParse(args, out opt))
             {
                 return;
             }
 
-            byte[] mac = new byte[0];
-            if (options.IsHost)
+            switch (opt.Action)
             {
-                if (!TryLoadMacForHost(options.HostNameOrMAC, out mac))
+                case CommandLineActionGroup.wake:
+                    WakeAction(opt);
+                    return;
+                case CommandLineActionGroup.add:
+                    AddAction(opt);
+                    return;
+                case CommandLineActionGroup.list:
+                    ListAction(opt);
+                    return;
+                case CommandLineActionGroup.remove:
+                    RemoveAction(opt);
+                    return;
+            }
+        }
+
+        private static void RemoveAction(CommandLineOptions options)
+        {
+            if (!File.Exists(HostsFile))
+            {
+                Colorizer.WriteLine("No custom hosts defined");
+                return;
+            }
+
+            // make sure we have that host.
+            string matchedMAC;
+            if (!TryReadHostFromFile(options.Host, out matchedMAC))
+            {
+                Colorizer.WriteLine("[Red!Error]: Could not find host [Cyan!{0}]", options.Host);
+                return;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            using (FileStream fs = new FileStream(HostsFile, FileMode.Open, FileAccess.Read))
+            using (StreamReader sr = new StreamReader(fs))
+            {
+                string line; int lineCount = 0;
+                while ((line = sr.ReadLine()) != null)
                 {
+                    lineCount++;
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    // check to see if the name of the host matches the name passed in.
+                    int posFirstEq = line.IndexOf('=');
+
+                    if (posFirstEq < 0)
+                    {
+                        Colorizer.WriteLine("[Yellow!Warning:] Invalid entry at line [Cyan!{0}]", lineCount);
+                        continue;
+                    }
+
+                    string hostFromLine = line.Substring(0, posFirstEq);
+                    if (!StringComparer.OrdinalIgnoreCase.Equals(hostFromLine, options.Host))
+                    {
+                        sb.AppendLine(line);
+                    }
+                }
+            }
+
+            // open the file for writing
+            using (FileStream fs = new FileStream(HostsFile, FileMode.Create, FileAccess.Write))
+            using (StreamWriter sr = new StreamWriter(fs))
+            {
+                sr.WriteLine(sb.ToString());
+            }
+
+            Colorizer.WriteLine("[Green!Done!] Removed host [Cyan!{0}]", options.Host);
+        }
+
+        private static void ListAction(CommandLineOptions options)
+        {
+            if (!File.Exists(HostsFile))
+            {
+                Colorizer.WriteLine("No custom hosts defined");
+                return;
+            }
+
+            Colorizer.WriteLine("These are the custom hosts defined:");
+            using (FileStream fs = new FileStream(HostsFile, FileMode.Open, FileAccess.Read))
+            using (StreamReader sr = new StreamReader(fs))
+            {
+                string line; int lineCount = 0;
+                while ((line = sr.ReadLine()) != null)
+                {
+                    lineCount++;
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    // check to see if the name of the host matches the name passed in.
+                    int posFirstEq = line.IndexOf('=');
+
+                    if (posFirstEq < 0)
+                    {
+                        Colorizer.WriteLine("[Yellow!Warning:] Invalid entry at line [Cyan!{0}]", lineCount);
+                        continue;
+                    }
+
+                    string hostFromLine = line.Substring(0, posFirstEq);
+                    string matchedMAC = line.Substring(posFirstEq + 1);
+
+                    Colorizer.WriteLine("[Cyan!{0}] = [Yellow!{1}]", hostFromLine, matchedMAC);
+                }
+            }
+        }
+
+        private static void AddAction(CommandLineOptions options)
+        {
+            // make sure we don't already have that host.
+            string matchedMAC;
+            if (TryReadHostFromFile(options.Host, out matchedMAC))
+            {
+                if (!string.IsNullOrEmpty(matchedMAC))
+                {
+                    Colorizer.WriteLine("[Red!Error]: Host [Cyan!{0}] already exists with value [Yellow!{1}]", options.Host, matchedMAC);
                     return;
                 }
-                Colorizer.WriteLine("Matched host '[Magenta!{0}]' to '[Magenta!{1}]'", options.HostNameOrMAC, BitConverter.ToString(mac));
             }
-            else
+
+            using (FileStream fs = new FileStream("hosts.txt", FileMode.Append, FileAccess.Write))
             {
-                // we are given a MAC, not a host
-                if (!TryConvertMACStringToBytes(options.HostNameOrMAC, out mac))
+                using (StreamWriter sr = new StreamWriter(fs))
                 {
+                    sr.WriteLine($"{options.Host}={options.MAC}");
+                }
+            }
+
+            Colorizer.WriteLine("[Green!Done]! Added host [Cyan!{0}] with MAC [Yellow!{1}]", options.Host, options.MAC);
+        }
+
+        private static void WakeAction(CommandLineOptions options)
+        {
+            byte[] mac = new byte[0];
+            if (!TryLoadMacForHost(options.Host, out mac))
+            {
+                // it was not found in the hosts.txt file.
+                // try to interpret as MAC
+                if (!TryConvertMACStringToBytes(options.Host, out mac))
+                {
+                    Colorizer.WriteLine("[Red!Error:] Could not find host '[Cyan!{0}]' in hosts.txt", options.Host);
                     return;
                 }
             }
@@ -71,12 +204,18 @@ namespace ConsoleApplication
             }
         }
 
-        private static bool TryLoadMacForHost(string hostName, out byte[] macAsBytes)
-        {
-            macAsBytes = null;
-            // read the host file and stop at the first one you find.
+        private const string HostsFile = "hosts.txt";
 
-            using (FileStream fs = new FileStream("hosts.txt", FileMode.Open, FileAccess.Read))
+        private static bool TryReadHostFromFile(string hostName, out string matchedMAC)
+        {
+            matchedMAC = null;
+
+            if (!File.Exists(HostsFile))
+            {
+                return false;
+            }
+
+            using (FileStream fs = new FileStream(HostsFile, FileMode.Open, FileAccess.Read))
             using (StreamReader sr = new StreamReader(fs))
             {
                 string line; int lineCount = 0;
@@ -101,13 +240,25 @@ namespace ConsoleApplication
 
                     if (StringComparer.OrdinalIgnoreCase.Equals(hostFromLine, hostName))
                     {
-                        // return the rest of the line converted to bytes.
-                        return  TryConvertMACStringToBytes(line.Substring(posFirstEq + 1), out macAsBytes);
+                        matchedMAC = line.Substring(posFirstEq + 1);
+                        return true;
                     }
                 }
             }
+            return false;
+        }
+        private static bool TryLoadMacForHost(string hostName, out byte[] macAsBytes)
+        {
+            macAsBytes = null;
+            // read the host file and stop at the first one you find.
+            string matchedMAC;
+            if (TryReadHostFromFile(hostName, out matchedMAC))
+            {
+                Colorizer.WriteLine("Matched host '[Magenta!{0}]' to '[Magenta!{1}]'", hostName, matchedMAC);
 
-            Colorizer.WriteLine("[Red!Error:] Could not find host '[Cyan!{0}]' in hosts.txt", hostName);
+                // return the rest of the line converted to bytes.
+                return TryConvertMACStringToBytes(matchedMAC, out macAsBytes);
+            }
 
             return false;
         }
