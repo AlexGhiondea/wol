@@ -3,9 +3,16 @@ Wake-On-LAN magic packet generator
 
 Send magic packets to your computer.
 
-## Syntax
+## Usage
 
-wol [MAC]
+### Wake host
 
-Example: wol 12:24:AC:34:23:56
- 
+wol.exe wake host 
+
+###  Manage hosts
+
+wol.exe list 
+
+wol.exe add host mac 
+
+wol.exe remove host 
