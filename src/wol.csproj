@@ -3,23 +3,24 @@
   <PropertyGroup>
     <Description>Wake-On-LAN magic packet generator</Description>
     <Authors>Alex Ghiondea</Authors>
-    <TargetFramework>netcoreapp1.0</TargetFramework>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <RuntimeFrameworkVersion>2.0.0-beta-001709-00</RuntimeFrameworkVersion>
     <RuntimeIdentifiers>win7-x64;osx.10.10-x64</RuntimeIdentifiers>
     <DebugType>portable</DebugType>
     <AssemblyName>wol</AssemblyName>
     <OutputType>Exe</OutputType>
-    <PackageTargetFallback Condition=" '$(TargetFramework)' == 'netcoreapp1.0' ">$(PackageTargetFallback);dnxcore50</PackageTargetFallback>
+
+    <TrimUnusedDependencies>true</TrimUnusedDependencies>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="**\*.cs" />
     <EmbeddedResource Include="**\*.resx" />
     <EmbeddedResource Include="compiler\resources\**\*" />
   </ItemGroup>
 
-  <ItemGroup Condition=" '$(TargetFramework)' == 'netcoreapp1.0' ">
-    <PackageReference Include="Microsoft.NETCore.App">
-      <Version>1.0.0</Version>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Packaging.Tools" >
+      <Version>1.0.0-beta-25109-01</Version>
     </PackageReference>
     <PackageReference Include="OutputColorizer">
       <Version>1.1.0</Version>
